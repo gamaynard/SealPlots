@@ -1,0 +1,170 @@
+## ---------------------------
+##
+## Script name: DeterrentCheck.R
+##
+## Purpose of script:
+##
+## Author: George A. Maynard
+##
+## Date Created: 2020-06-18
+##
+## Copyright (c) George Alphonse Maynard, 2020
+## Email: galphonsemaynard@gmail.com
+##
+## ---------------------------
+##
+## Notes:
+##   
+##
+## ---------------------------
+
+## set working directory
+
+## ---------------------------
+
+## Set options
+options(scipen = 6, digits = 4) # eliminate scientific notation
+## ---------------------------
+
+## load up the packages we will need:  (uncomment as required)
+library(RMySQL)
+library(lubridate)
+library(vioplot)
+## ---------------------------
+
+## load up our functions into memory
+
+## ---------------------------
+## Read in and join all data from the database
+db=dbConnect(
+  MySQL(), 
+  dbname="HaulDB",
+  host='localhost',
+  port=3306,
+  user=user,
+  password=password
+)
+species=dbReadTable(
+  conn=db,
+  name="species"
+)
+trap=dbReadTable(
+  conn=db,
+  name="trap"
+)
+tend=dbReadTable(
+  conn=db,
+  name="tend"
+)
+hauls=dbReadTable(
+  conn=db,
+  name="haul"
+)
+hauls$SpeciesID=as.character(hauls$Species_SpeciesID)
+hauls$Species_SpeciesID=NULL
+hauls=merge(hauls,species)
+rm(species)
+hauls$TendID=as.character(hauls$Tend_TendID)
+hauls$Tend_TendID=NULL
+hauls=merge(hauls,tend)
+hauls$TrapID=as.character(hauls$Trap_TrapID)
+hauls$Trap_TrapID=NULL
+hauls=merge(hauls,trap)
+rm(trap)
+
+## Subset out only data from the inshore trap
+data=tend
+data=subset(data,data$Trap_TrapID==1)
+## Plot the number of seals based on deterrent operation
+boxplot(
+  data$NumSeals~data$DeterrentOperational,
+  xlab="Deterrent Operational",
+  ylab="Seals Observed at / near Trap"
+  )
+## Add a watermark because the data is preliminary
+text(x = grconvertX(0.5, from = "npc"),  # align to center of plot X axis
+     y = grconvertY(0.5, from = "npc"), # align to center of plot Y axis
+     labels = "PRELIMINARY", # our watermark
+     cex = 3, font = 2, # large, bold font - hard to miss
+     col = rgb(1, 0, 0, .5), # translucent (0.2 = 20%) red color
+     srt = 45) # srt = angle of text: 45 degree angle to X axis
+# Add another watermark in lower (side = 1) right (adj = 1) corner
+watermark=paste(
+  "DATA CURRENT TO: ", 
+  max(round_date(ymd_hms(data$Date),unit="day"))
+  )
+mtext(watermark, side = 1, line = -1, adj = 1, col = rgb(1, 0, 0, .5), cex = 1.2)
+wilcox.test(data$NumSeals~data$DeterrentOperational)
+
+## Separate out deterrent operation into single tone, multi-tone, and off
+data$mode="NONE"
+data$Date=round_date(
+  ymd_hms(data$Date),
+  unit="day"
+)
+multi=data$Date[which(grepl("Tones",data$DeterrentNotes))]
+data$mode=ifelse(
+  data$Date>=multi,
+  "MULTI",
+  "SINGLE"
+)
+data$mode=ifelse(
+  data$DeterrentOperational==0,
+  "NONE",
+  data$mode
+)
+data$mode=factor(
+  data$mode,
+  levels=c("NONE","SINGLE","MULTI"),
+  ordered=TRUE
+)
+## Plot the number of seals based on deterrent mode
+boxplot(
+  data$NumSeals~data$mode,
+  xlab="Deterrent Mode",
+  ylab="Seals Observed at / near Trap"
+)
+## Add a watermark because the data is preliminary
+text(x = grconvertX(0.5, from = "npc"),  # align to center of plot X axis
+     y = grconvertY(0.5, from = "npc"), # align to center of plot Y axis
+     labels = "PRELIMINARY", # our watermark
+     cex = 3, font = 2, # large, bold font - hard to miss
+     col = rgb(1, 0, 0, .5), # translucent (0.2 = 20%) red color
+     srt = 45) # srt = angle of text: 45 degree angle to X axis
+# Add another watermark in lower (side = 1) right (adj = 1) corner
+watermark=paste(
+  "DATA CURRENT TO: ", 
+  max(data$Date)
+)
+mtext(watermark, side = 1, line = -1, adj = 1, col = rgb(1, 0, 0, .5), cex = 1.2)
+x=kruskal.test(data$NumSeals~data$mode)
+## Test for differences in weight of a species of interest hauled and weight 
+## partially consumed when the deterrent was running or not
+## Species of interest (soi)
+soi="SQUID"
+data=subset(
+  hauls,
+  hauls$TrapID==1&hauls$CommonName==soi
+  )
+lumf=subset(
+  data,
+  data$Action=="PARTIALLY CONSUMED"
+)
+land=subset(
+  data,
+  data$Action=="HAULED"
+)
+boxplot(
+  land$Quantity~land$DeterrentOperational,
+  xlab="Deterrent Operational",
+  ylab="Landed (lbs)",
+  main=paste(soi," Landings",sep="")
+)
+wilcox.test(land$Quantity~land$DeterrentOperational)
+boxplot(
+  lumf$Quantity~lumf$DeterrentOperational,
+  xlab="Deterrent Operational",
+  ylab="LUMF (lbs)",
+  main=paste(soi," Legal and Unmarketable",sep="")
+)
+wilcox.test(lumf$Quantity~lumf$DeterrentOperational)
