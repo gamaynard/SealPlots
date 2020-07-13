@@ -71,7 +71,6 @@ hauls$TrapID=as.character(hauls$Trap_TrapID)
 hauls$Trap_TrapID=NULL
 hauls=merge(hauls,trap)
 rm(trap)
-
 ## Create a list of dates when the deterrent was operational
 op=round_date(ymd_hms(subset(tend,tend$DeterrentOperational==1)$Date),unit="day")
 ## Assign each trap day a "mode"
@@ -110,12 +109,16 @@ if(trap=="OFFSHORE"){
     data$DeterrentOperational=ifelse(data$Date%in%op,1,0)
   }
 }
+## Subset out only data from the inshore trap
+data=tend
+data=subset(data,data$Trap_TrapID==1)
 ## Plot the number of seals based on deterrent operation
 boxplot(
   data$NumSeals~data$DeterrentOperational,
   xlab="Deterrent Operational",
   ylab="Seals Observed at / near Trap",
-  main=trap
+  main=trap,
+  ylab="Seals Observed at / near Trap"
   )
 ## Add a watermark because the data is preliminary
 text(x = grconvertX(0.5, from = "npc"),  # align to center of plot X axis
@@ -131,12 +134,39 @@ watermark=paste(
   )
 mtext(watermark, side = 1, line = -1, adj = 1, col = rgb(1, 0, 0, .5), cex = 1.2)
 wilcox.test(data$NumSeals~data$DeterrentOperational)
+max(round_date(ymd_hms(data$Date),unit="day"))
+mtext(watermark, side = 1, line = -1, adj = 1, col = rgb(1, 0, 0, .5), cex = 1.2)
+wilcox.test(data$NumSeals~data$DeterrentOperational)
+
+## Separate out deterrent operation into single tone, multi-tone, and off
+data$mode="NONE"
+data$Date=round_date(
+  ymd_hms(data$Date),
+  unit="day"
+)
+multi=data$Date[which(grepl("Tones",data$DeterrentNotes))]
+data$mode=ifelse(
+  data$Date>=multi,
+  "MULTI",
+  "SINGLE"
+)
+data$mode=ifelse(
+  data$DeterrentOperational==0,
+  "NONE",
+  data$mode
+)
+data$mode=factor(
+  data$mode,
+  levels=c("NONE","SINGLE","MULTI"),
+  ordered=TRUE
+)
 ## Plot the number of seals based on deterrent mode
 boxplot(
   data$NumSeals~data$mode,
   xlab="Deterrent Mode",
   ylab="Seals Observed at / near Trap",
-  main=trap
+  main=trap,
+  ylab="Seals Observed at / near Trap"
 )
 ## Add a watermark because the data is preliminary
 text(x = grconvertX(0.5, from = "npc"),  # align to center of plot X axis
@@ -156,7 +186,7 @@ x
 ## Test for differences in weight of a species of interest hauled and weight 
 ## partially consumed when the deterrent was running or not
 ## Species of interest (soi)
-soi="ATLANTIC MENHADEN"
+soi="SQUID"
 data=subset(
   hauls,
   hauls$TrapID==1&hauls$CommonName==soi
@@ -183,4 +213,3 @@ boxplot(
   main=paste(soi," Legal and Unmarketable",sep="")
 )
 wilcox.test(lumf$Quantity~lumf$DeterrentOperational)
-
